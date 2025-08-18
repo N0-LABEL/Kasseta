@@ -765,4 +765,4 @@ async def loop(ctx):
 
 
 # Замените на ваш токен
-bot.run('MTIyMzc2MDExODQ0NTg5OTc4Ng.GRgLzk.a-62rexOHKYytHxRdDFfU9PlDT0NIvkzcAESmA')
+bot.run('')
