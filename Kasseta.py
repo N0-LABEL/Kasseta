@@ -60,7 +60,7 @@ def format_duration(seconds):
 def create_embed(title, description=None, color=0x4682B4):
     embed = discord.Embed(title=title, description=description, color=color)
     embed.set_footer(text="Министерство культуры ВФ | Кассета",
-                     icon_url="https://world-ocean.ru/images/main/mkrf_icon.png")
+                     icon_url="https://github.com/N0-LABEL/Kasseta/blob/main/mkrf.png?raw=true")
     return embed
 
 
@@ -765,4 +765,4 @@ async def loop(ctx):
 
 
 # Замените на ваш токен
-bot.run('')
+bot.run('MTIyMzc2MDExODQ0NTg5OTc4Ng.GRgLzk.a-62rexOHKYytHxRdDFfU9PlDT0NIvkzcAESmA')
