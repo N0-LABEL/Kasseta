@@ -39,6 +39,8 @@ ytdl_format_options = {
     'quiet': True,
     'source_address': '0.0.0.0',
     'default_search': 'ytsearch',
+    'skip_download': True,
+    'nocheckcertificate': True,
     'postprocessors': [{
         'key': 'FFmpegExtractAudio',
         'preferredcodec': 'mp3',
@@ -47,8 +49,8 @@ ytdl_format_options = {
 }
 
 ffmpeg_options = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 10M -probesize 10M',
-    'options': '-vn'
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 0 -probesize 32k',
+    'options': '-vn -loglevel error -hide_banner -nostats -fflags nobuffer -flags low_delay -reorder_queue_size 0 -bufsize 64k'
 }
 
 
@@ -120,7 +122,7 @@ async def play_next(ctx):
     else:
         current = None
         is_radio = False
-        await ctx.send(embed=create_embed("Очередь пуста", "Музыка остановлена."))
+        await send_embed(ctx, create_embed("Очередь пуста", "Музыка остановлена."))
         return
 
     current = track
@@ -138,7 +140,7 @@ async def play_next(ctx):
             f"`00:00 / {format_duration(duration)}`\n"
             f"Добавил: {user.mention}"
         )
-        last_playing_message = await ctx.send(embed=create_embed("Сейчас играет", description))
+        last_playing_message = await send_embed(ctx, create_embed("Сейчас играет", description))
 
         if not nowplaying_updater:
             nowplaying_updater = bot.loop.create_task(update_now_playing(ctx, last_playing_message))
@@ -207,7 +209,7 @@ def process_track(info):
 async def add_playlist(ctx, search):
     # Проверка, что это ссылка на плейлист
     if not is_playlist_url(search):
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Это не ссылка на плейлист! Для одиночных треков используйте `?play`."
         ))
@@ -216,7 +218,7 @@ async def add_playlist(ctx, search):
         info = await run_in_executor(extract_info_sync, search, True)
 
         if not info or 'entries' not in info or not info['entries']:
-            return await ctx.send(embed=create_embed("Ошибка", "Плейлист не найден или пуст"))
+            return await send_embed(ctx, create_embed("Ошибка", "Плейлист не найден или пуст"))
 
         tracks = []
         for entry in info['entries']:
@@ -229,7 +231,7 @@ async def add_playlist(ctx, search):
         for track in tracks:
             queue.append(track)
 
-        await ctx.send(embed=create_embed(
+        await send_embed(ctx, create_embed(
             "Плейлист добавлен",
             f"✅ Добавлено треков: {len(tracks)}\n"
             f"🎵 **{tracks[0]['title']}** - первый трек\n"
@@ -240,7 +242,7 @@ async def add_playlist(ctx, search):
             await play_next(ctx)
 
     except Exception as e:
-        await ctx.send(embed=create_embed("Ошибка", f"Не удалось загрузить плейлист: {e}"))
+        await send_embed(ctx, create_embed("Ошибка", f"Не удалось загрузить плейлист: {e}"))
 
 
 # События бота
@@ -254,7 +256,7 @@ async def on_ready():
 # Команды бота
 @bot.command()
 async def about(ctx):
-    await ctx.send(embed=create_embed(
+    await send_embed(ctx, create_embed(
         "О боте",
         "🎶 Кассета — это универсальный музыкальный бот с широким функционалом. "
         "Умеет воспроизводить музыку с YouTube, плейлисты, перематывать треки и управлять громкостью, "
@@ -265,7 +267,7 @@ async def about(ctx):
 @bot.command()
 async def ping(ctx):
     latency = round(bot.latency * 1000)
-    await ctx.send(embed=create_embed("Пинг", f"📡 {latency}ms"))
+    await send_embed(ctx, create_embed("Пинг", f"📡 {latency}ms"))
 
 
 @bot.command()
@@ -273,13 +275,13 @@ async def play(ctx, *, search: str):
     global voice_client, is_radio, is_paused, queue, current, last_playing_message
 
     if is_valid_url(search) and is_playlist_url(search):
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Похоже, вы ввели ссылку на плейлист. Для плейлистов используйте команду `?playlist`."
         ))
 
     if is_radio:
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Сейчас играет радио. Остановите радио командой `?stop`, чтобы добавить треки в очередь."
         ))
@@ -287,7 +289,7 @@ async def play(ctx, *, search: str):
     is_paused = False
 
     if not ctx.author.voice:
-        return await ctx.send(embed=create_embed("Ошибка", "Вы должны находиться в голосовом канале."))
+        return await send_embed(ctx, create_embed("Ошибка", "Вы должны находиться в голосовом канале."))
 
     try:
         if not voice_client or not voice_client.is_connected():
@@ -295,19 +297,19 @@ async def play(ctx, *, search: str):
         elif voice_client.channel != ctx.author.voice.channel:
             await voice_client.move_to(ctx.author.voice.channel)
     except Exception as e:
-        return await ctx.send(embed=create_embed("Ошибка подключения", f"{e}"))
+        return await send_embed(ctx, create_embed("Ошибка подключения", f"{e}"))
 
     try:
         info = await run_in_executor(extract_info_sync, search, False)
 
         if not info:
-            return await ctx.send(embed=create_embed("Ошибка", "Трек не найден."))
+            return await send_embed(ctx, create_embed("Ошибка", "Трек не найден."))
 
         track = process_track(info)
         track['user'] = ctx.author
         queue.append(track)
 
-        await ctx.send(embed=create_embed(
+        await send_embed(ctx, create_embed(
             "Добавлено в очередь",
             f"✅ **{track['title']}** (`{format_duration(track['duration'])}`)\nДобавил: {ctx.author.mention}"
         ))
@@ -316,7 +318,7 @@ async def play(ctx, *, search: str):
             await play_next(ctx)
 
     except Exception as e:
-        await ctx.send(embed=create_embed("Ошибка", f"Не удалось получить трек: {e}"))
+        await send_embed(ctx, create_embed("Ошибка", f"Не удалось получить трек: {e}"))
 
 
 @bot.command()
@@ -325,28 +327,28 @@ async def playlist(ctx, *, search: str):
 
     # Если это URL, но не плейлист — сразу ошибка
     if is_valid_url(search) and not is_playlist_url(search):
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Похоже, вы ввели ссылку не на плейлист. Для одиночных треков используйте команду `?play`."
         ))
 
     # Если это просто текст (не URL) — тоже ошибка (если нужно)
     elif not is_valid_url(search):
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Вы ввели текст, а не ссылку на плейлист. Используйте `?play` для поиска треков."
         ))
 
     # Если играет радио — ошибка
     if is_radio:
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Сейчас играет радио. Остановите радио командой `?stop`, чтобы добавить треки в очередь."
         ))
 
     # Проверка голосового канала
     if not ctx.author.voice:
-        return await ctx.send(embed=create_embed("Ошибка", "Вы должны находиться в голосовом канале."))
+        return await send_embed(ctx, create_embed("Ошибка", "Вы должны находиться в голосовом канале."))
 
     # Подключение к голосовому каналу
     try:
@@ -355,10 +357,10 @@ async def playlist(ctx, *, search: str):
         elif voice_client.channel != ctx.author.voice.channel:
             await voice_client.move_to(ctx.author.voice.channel)
     except Exception as e:
-        return await ctx.send(embed=create_embed("Ошибка подключения", f"{e}"))
+        return await send_embed(ctx, create_embed("Ошибка подключения", f"{e}"))
 
     # Если это действительно плейлист — загружаем
-    await ctx.send(embed=create_embed("Загрузка плейлиста", "⏳ Пожалуйста, подождите, плейлист загружается..."))
+    await send_embed(ctx, create_embed("Загрузка плейлиста", "⏳ Пожалуйста, подождите, плейлист загружается..."))
     bot.loop.create_task(add_playlist(ctx, search))
 
 
@@ -372,7 +374,7 @@ async def nowplaying(ctx):
         pass
 
     if not current:
-        return await ctx.send(embed=create_embed("Пусто", "Сейчас ничего не играет."))
+        return await send_embed(ctx, create_embed("Пусто", "Сейчас ничего не играет."))
 
     if last_playing_message:
         try:
@@ -399,7 +401,7 @@ async def nowplaying(ctx):
         f"`{format_duration(position)} / {format_duration(duration)}`\n"
         f"Добавил: {current['user'].mention}"
     )
-    last_playing_message = await ctx.send(embed=create_embed("Сейчас играет", description))
+    last_playing_message = await send_embed(ctx, create_embed("Сейчас играет", description))
 
     if not nowplaying_updater and voice_client and (voice_client.is_playing() or voice_client.is_paused()):
         nowplaying_updater = bot.loop.create_task(update_now_playing(ctx, last_playing_message))
@@ -408,7 +410,7 @@ async def nowplaying(ctx):
 @bot.command(name='queue')
 async def queue_(ctx, page: int = 1):
     if not queue:
-        return await ctx.send(embed=create_embed("Очередь пуста"))
+        return await send_embed(ctx, create_embed("Очередь пуста"))
 
     items_per_page = 10
     total_pages = max(1, (len(queue) + items_per_page - 1) // items_per_page)
@@ -423,7 +425,7 @@ async def queue_(ctx, page: int = 1):
 
     total_duration = sum(song.get('duration', 0) for song in queue)
     header = f"Текущая очередь | {len(queue)} треков | {format_duration(total_duration)} | Страница {page}/{total_pages}"
-    message = await ctx.send(embed=create_embed(header, "\n".join(lines), color=0xB0C4DE))
+    message = await send_embed(ctx, create_embed(header, "\n".join(lines), color=0xB0C4DE))
 
     if total_pages > 1:
         await message.add_reaction("⬅️")
@@ -465,29 +467,29 @@ async def queue_(ctx, page: int = 1):
 async def remove(ctx, arg: str):
     global queue
     if not queue:
-        return await ctx.send(embed=create_embed("Очередь пуста"))
+        return await send_embed(ctx, create_embed("Очередь пуста"))
     if arg == 'all':
         queue.clear()
-        await ctx.send(embed=create_embed("Очищено", "Очередь была полностью очищена."))
+        await send_embed(ctx, create_embed("Очищено", "Очередь была полностью очищена."))
     else:
         try:
             index = int(arg) - 1
             if 0 <= index < len(queue):
                 removed = queue.pop(index)
-                await ctx.send(embed=create_embed("Удалено", f"🗑️ {removed['title']}"))
+                await send_embed(ctx, create_embed("Удалено", f"🗑️ {removed['title']}"))
             else:
-                await ctx.send(embed=create_embed("Ошибка", "Неверный индекс!"))
+                await send_embed(ctx, create_embed("Ошибка", "Неверный индекс!"))
         except ValueError:
-            await ctx.send(embed=create_embed("Ошибка", "Используйте число или 'all'"))
+            await send_embed(ctx, create_embed("Ошибка", "Используйте число или 'all'"))
 
 
 @bot.command()
 async def skip(ctx):
     if voice_client and voice_client.is_playing():
         voice_client.stop()
-        await ctx.send(embed=create_embed("Пропущено", "⏭️ Песня была пропущена."))
+        await send_embed(ctx, create_embed("Пропущено", "⏭️ Песня была пропущена."))
     else:
-        await ctx.send(embed=create_embed("Ошибка", "Сейчас ничего не играет."))
+        await send_embed(ctx, create_embed("Ошибка", "Сейчас ничего не играет."))
 
 
 @bot.command()
@@ -511,43 +513,43 @@ async def stop(ctx):
     is_paused = False
     last_playing_message = None
 
-    await ctx.send(embed=create_embed("Остановлено", "⏹️ Воспроизведение остановлено и бот отключен."))
+    await send_embed(ctx, create_embed("Остановлено", "⏹️ Воспроизведение остановлено и бот отключен."))
 
 
 @bot.command()
 async def pause(ctx):
     global is_paused
     if not voice_client or not voice_client.is_connected():
-        return await ctx.send(embed=create_embed("Ошибка", "Бот не подключен к голосовому каналу."))
+        return await send_embed(ctx, create_embed("Ошибка", "Бот не подключен к голосовому каналу."))
     if voice_client.is_playing():
         voice_client.pause()
         is_paused = True
-        await ctx.send(embed=create_embed("Пауза", "⏸️ Воспроизведение приостановлено."))
+        await send_embed(ctx, create_embed("Пауза", "⏸️ Воспроизведение приостановлено."))
     elif voice_client.is_paused():
         voice_client.resume()
         is_paused = False
-        await ctx.send(embed=create_embed("Продолжено", "▶️ Воспроизведение возобновлено."))
+        await send_embed(ctx, create_embed("Продолжено", "▶️ Воспроизведение возобновлено."))
     else:
-        await ctx.send(embed=create_embed("Ошибка", "Сейчас ничего не играет."))
+        await send_embed(ctx, create_embed("Ошибка", "Сейчас ничего не играет."))
 
 
 @bot.command()
 async def volume(ctx, level: int = None):
     global current_volume
     if level is None:
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Громкость",
             f"🔊 Текущая громкость: {int(current_volume * 100)}%"
         ))
     if not 0 <= level <= 150:
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Уровень громкости должен быть между 0 и 150"
         ))
     current_volume = level / 100
     if voice_client and voice_client.source:
         voice_client.source.volume = current_volume
-    await ctx.send(embed=create_embed(
+    await send_embed(ctx, create_embed(
         "Громкость",
         f"🔊 Установлена громкость: {level}%"
     ))
@@ -556,9 +558,9 @@ async def volume(ctx, level: int = None):
 @bot.command()
 async def shuffle(ctx):
     if not queue:
-        return await ctx.send(embed=create_embed("Очередь пуста"))
+        return await send_embed(ctx, create_embed("Очередь пуста"))
     random.shuffle(queue)
-    await ctx.send(embed=create_embed("Перемешано", "🔀 Очередь перемешана."))
+    await send_embed(ctx, create_embed("Перемешано", "🔀 Очередь перемешана."))
 
 
 @bot.command()
@@ -566,19 +568,19 @@ async def search(ctx, *, query: str):
     global voice_client
 
     if is_valid_url(query):
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Для поиска используйте только текст. Для воспроизведения по ссылке используйте `?play`."
         ))
 
     if is_radio:
-        return await ctx.send(embed=create_embed(
+        return await send_embed(ctx, create_embed(
             "Ошибка",
             "Сейчас играет радио. Остановите радио командой `?stop`, чтобы добавить треки в очередь."
         ))
 
     if not ctx.author.voice:
-        return await ctx.send(embed=create_embed("Ошибка", "Вы должны находиться в голосовом канале."))
+        return await send_embed(ctx, create_embed("Ошибка", "Вы должны находиться в голосовом канале."))
 
     try:
         if not voice_client or not voice_client.is_connected():
@@ -586,14 +588,14 @@ async def search(ctx, *, query: str):
         elif voice_client.channel != ctx.author.voice.channel:
             await voice_client.move_to(ctx.author.voice.channel)
     except Exception as e:
-        return await ctx.send(embed=create_embed("Ошибка подключения", f"{e}"))
+        return await send_embed(ctx, create_embed("Ошибка подключения", f"{e}"))
 
     try:
         results = await run_in_executor(
             lambda: YTDL.extract_info(f"ytsearch4:{query}", download=False)['entries']
         )
     except Exception as e:
-        return await ctx.send(embed=create_embed("Ошибка", f"Не удалось выполнить поиск: {e}"))
+        return await send_embed(ctx, create_embed("Ошибка", f"Не удалось выполнить поиск: {e}"))
 
     valid_results = []
     for entry in results:
@@ -601,7 +603,7 @@ async def search(ctx, *, query: str):
             valid_results.append(entry)
 
     if not valid_results:
-        return await ctx.send(embed=create_embed("Ошибка", "Ничего не найдено."))
+        return await send_embed(ctx, create_embed("Ошибка", "Ничего не найдено."))
 
     lines = []
     for i, entry in enumerate(valid_results, 1):
@@ -614,7 +616,7 @@ async def search(ctx, *, query: str):
         color=0x3498db
     )
     embed.set_footer(text="Выберите трек или нажмите ❌ для отмены")
-    message = await ctx.send(embed=embed)
+    message = await send_embed(ctx, embed)
 
     reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '❌'][:len(valid_results) + 1]
     for i in range(len(valid_results)):
@@ -644,7 +646,7 @@ async def search(ctx, *, query: str):
                 'user': ctx.author
             })
 
-            await ctx.send(embed=create_embed(
+            await send_embed(ctx, create_embed(
                 "Добавлено в очередь",
                 f"✅ **{title}** (`{format_duration(duration)}`)\nДобавил: {ctx.author.mention}"
             ))
@@ -655,26 +657,26 @@ async def search(ctx, *, query: str):
             await message.delete()
     except asyncio.TimeoutError:
         await message.delete()
-        await ctx.send(embed=create_embed("Время вышло", "Выбор трека отменен."))
+        await send_embed(ctx, create_embed("Время вышло", "Выбор трека отменен."))
 
 
 @bot.command()
 async def seek(ctx, seconds_str: str):
     global current, start_time, voice_client, is_seeking, last_playing_message
     if not current or not voice_client or not voice_client.is_playing():
-        return await ctx.send(embed=create_embed("Ошибка", "Ничего не играет."))
+        return await send_embed(ctx, create_embed("Ошибка", "Ничего не играет."))
     if not seconds_str.startswith(('+', '-')):
-        return await ctx.send(embed=create_embed("Ошибка", "Используйте формат: `?seek +30` или `?seek -15`"))
+        return await send_embed(ctx, create_embed("Ошибка", "Используйте формат: `?seek +30` или `?seek -15`"))
     try:
         seconds = int(seconds_str)
     except ValueError:
-        return await ctx.send(embed=create_embed("Ошибка", "Введите целое число секунд"))
+        return await send_embed(ctx, create_embed("Ошибка", "Введите целое число секунд"))
 
     current_position = time.time() - start_time
     new_position = max(0, current_position + seconds)
     duration = current.get('duration', 0)
     if new_position > duration:
-        return await ctx.send(embed=create_embed("Ошибка", "Время превышает длительность трека."))
+        return await send_embed(ctx, create_embed("Ошибка", "Время превышает длительность трека."))
 
     start_time = time.time() - new_position
     is_seeking = True
@@ -695,7 +697,7 @@ async def seek(ctx, seconds_str: str):
             asyncio.run_coroutine_threadsafe(fut, bot.loop)
 
         voice_client.play(source, after=after_seek)
-        await ctx.send(embed=create_embed("Перемотка", f"⏩ Установлена позиция: {format_duration(new_position)}"))
+        await send_embed(ctx, create_embed("Перемотка", f"⏩ Установлена позиция: {format_duration(new_position)}"))
         if last_playing_message:
             try:
                 progress_bar = create_progress_bar(new_position, duration)
@@ -710,12 +712,12 @@ async def seek(ctx, seconds_str: str):
                 pass
     except Exception as e:
         is_seeking = False
-        await ctx.send(embed=create_embed("Ошибка", f"Не удалось перемотать: {e}"))
+        await send_embed(ctx, create_embed("Ошибка", f"Не удалось перемотать: {e}"))
 
 
 @bot.command()
 async def playlists(ctx):
-    await ctx.send(embed=create_embed("Плейлисты", "🎧 Вставьте ссылку на YouTube-плейлист в команду ?playlist."))
+    await send_embed(ctx, create_embed("Плейлисты", "🎧 Вставьте ссылку на YouTube-плейлист в команду ?playlist."))
 
 
 @bot.command()
@@ -742,7 +744,7 @@ async def help(ctx):
     ]
     for cmd, desc in commands_list:
         embed.add_field(name=cmd, value=desc, inline=False)
-    await ctx.send(embed=embed)
+    await send_embed(ctx, embed)
 
 
 @bot.command()
@@ -758,13 +760,13 @@ async def radio(ctx, url: str):
     is_looping = False
     try:
         if not ctx.author.voice:
-            return await ctx.send(embed=create_embed("Ошибка", "Вы должны находиться в голосовом канале."))
+            return await send_embed(ctx, create_embed("Ошибка", "Вы должны находиться в голосовом канале."))
         if not voice_client or not voice_client.is_connected():
             voice_client = await ctx.author.voice.channel.connect()
         elif voice_client.channel != ctx.author.voice.channel:
             await voice_client.move_to(ctx.author.voice.channel)
     except Exception as e:
-        return await ctx.send(embed=create_embed("Ошибка подключения", f"{e}"))
+        return await send_embed(ctx, create_embed("Ошибка подключения", f"{e}"))
 
     def after_playing(e):
         fut = play_next(ctx)
@@ -775,16 +777,16 @@ async def radio(ctx, url: str):
         source = discord.PCMVolumeTransformer(source, current_volume)
         if voice_client:
             voice_client.play(source, after=after_playing)
-            await ctx.send(embed=create_embed("Радио", f"📻 {url}"))
+            await send_embed(ctx, create_embed("Радио", f"📻 {url}"))
     except Exception as e:
-        await ctx.send(embed=create_embed("Ошибка", f"Не удалось воспроизвести радио: {e}"))
+        await send_embed(ctx, create_embed("Ошибка", f"Не удалось воспроизвести радио: {e}"))
 
 
 @bot.command()
 async def loop(ctx):
     global is_looping
     is_looping = not is_looping
-    await ctx.send(embed=create_embed("Повтор", f"🔁 {'Повтор включён' if is_looping else 'Повтор выключен'}"))
+    await send_embed(ctx, create_embed("Повтор", f"🔁 {'Повтор включён' if is_looping else 'Повтор выключен'}"))
 
 
 # Замените на ваш токен
