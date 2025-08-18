@@ -8,6 +8,7 @@ import time
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 import re
+import os
 
 # Глобальный исполнитель для тяжелых операций
 executor = ThreadPoolExecutor(max_workers=10)
@@ -27,6 +28,10 @@ is_seeking = False
 start_time = 0
 last_playing_message = None
 nowplaying_updater = None
+
+# Путь к локальному файлу иконки МКРФ
+MKRF_ICON_FILENAME = "mkrf_icon.png"
+MKRF_ICON_PATH = "/workspace/" + MKRF_ICON_FILENAME
 
 # Настройки yt-dlp
 ytdl_format_options = {
@@ -59,9 +64,27 @@ def format_duration(seconds):
 
 def create_embed(title, description=None, color=0x4682B4):
     embed = discord.Embed(title=title, description=description, color=color)
-    embed.set_footer(text="Министерство культуры ВФ | Кассета",
-                     icon_url="https://world-ocean.ru/images/main/mkrf_icon.png")
+    embed.set_footer(
+        text="Министерство культуры ВФ | Кассета",
+        icon_url=f"attachment://{MKRF_ICON_FILENAME}"
+    )
     return embed
+
+
+async def send_embed(ctx, embed: discord.Embed):
+    """Отправляет embed, прикладывая локальный файл иконки МКРФ, если он существует."""
+    try:
+        embed_dict = embed.to_dict()
+        footer = embed_dict.get('footer') or {}
+        icon_url = footer.get('icon_url') or footer.get('iconURL')
+        needs_attachment = isinstance(icon_url, str) and icon_url.startswith('attachment://')
+    except Exception:
+        needs_attachment = False
+
+    if needs_attachment and os.path.isfile(MKRF_ICON_PATH):
+        return await ctx.send(embed=embed, file=discord.File(MKRF_ICON_PATH, filename=MKRF_ICON_FILENAME))
+    else:
+        return await ctx.send(embed=embed)
 
 
 def create_progress_bar(position, duration, length=15):
