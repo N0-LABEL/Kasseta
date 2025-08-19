@@ -33,7 +33,7 @@ class FootballBot(commands.Bot):
         self.scheduler = scheduler
         self.voice_guard = voice_guard
         self.sounds = sounds
-        self.tree = app_commands.CommandTree(self)
+        # self.tree is provided by commands.Bot in discord.py v2
 
     async def setup_hook(self) -> None:
         await self.tree.sync(guild=discord.Object(id=self.config.guild_id))
