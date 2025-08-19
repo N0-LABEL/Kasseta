@@ -74,6 +74,8 @@ async def create_bot() -> FootballBot:
         try:
             for guild in bot.guilds:
                 await bot.tree.sync(guild=guild)
+            # Обновим и глобальные, чтобы не было рассинхронизации
+            await bot.tree.sync()
         except Exception:
             pass
         await bot.voice_guard.ensure_connected(bot)
@@ -102,6 +104,7 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="live", description="Подписаться на лайв (команда или лига)")
     @app_commands.describe(name="Команда или лига")
+    @app_commands.rename(name="team-or-league-name")
     @app_commands.autocomplete(name=_subject_autocomplete)
     async def live_cmd(interaction: discord.Interaction, name: str):
         await require_guild_and_channel(interaction, config)
@@ -112,6 +115,7 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="live-stop", description="Отменить подписку (команда или лига)")
     @app_commands.describe(name="Команда или лига")
+    @app_commands.rename(name="team-or-league-name")
     @app_commands.autocomplete(name=_subject_autocomplete)
     async def live_stop_cmd(interaction: discord.Interaction, name: str):
         await require_guild_and_channel(interaction, config)
@@ -158,6 +162,7 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="league-table", description="Показать таблицу лиги")
     @app_commands.describe(league="Название лиги")
+    @app_commands.rename(league="league-name")
     @app_commands.autocomplete(league=_league_autocomplete)
     async def league_table_cmd(interaction: discord.Interaction, league: str):
         await require_guild_and_channel(interaction, config)
@@ -168,6 +173,7 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="league-streaks", description="Показать серии лиги")
     @app_commands.describe(league="Название лиги")
+    @app_commands.rename(league="league-name")
     @app_commands.autocomplete(league=_league_autocomplete)
     async def league_streaks_cmd(interaction: discord.Interaction, league: str):
         await require_guild_and_channel(interaction, config)
