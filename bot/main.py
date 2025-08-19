@@ -36,8 +36,15 @@ class FootballBot(commands.Bot):
         # self.tree is provided by commands.Bot in discord.py v2
 
     async def setup_hook(self) -> None:
-        await self.tree.sync(guild=discord.Object(id=self.config.guild_id))
-        logging.getLogger(__name__).info("Слэш-команды синхронизированы")
+        # Global sync (may take time to propagate) plus targeted guild sync if задан
+        try:
+            if self.config.guild_id:
+                await self.tree.sync(guild=discord.Object(id=self.config.guild_id))
+            else:
+                await self.tree.sync()
+            logging.getLogger(__name__).info("Слэш-команды синхронизированы")
+        except Exception as e:
+            logging.getLogger(__name__).exception("Ошибка синхронизации команд: %s", e)
 
 
 async def create_bot() -> FootballBot:
@@ -63,6 +70,12 @@ async def create_bot() -> FootballBot:
     @bot.event
     async def on_ready():
         logger.info(f"Вошёл как {bot.user} (id={bot.user.id})")
+        # Быстрая синхронизация на все гильдии, где есть бот (мгновенно)
+        try:
+            for guild in bot.guilds:
+                await bot.tree.sync(guild=guild)
+        except Exception:
+            pass
         await bot.voice_guard.ensure_connected(bot)
         bot.loop.create_task(bot.scheduler.run(bot))
 
@@ -73,7 +86,6 @@ async def create_bot() -> FootballBot:
 
     # ===== Команды =====
     @bot.tree.command(name="help", description="Показать помощь")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def help_cmd(interaction: discord.Interaction):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -82,7 +94,6 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="live", description="Подписаться на лайв (команда или лига)")
     @app_commands.describe(name="Команда или лига")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def live_cmd(interaction: discord.Interaction, name: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -92,7 +103,6 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="live-stop", description="Отменить подписку (команда или лига)")
     @app_commands.describe(name="Команда или лига")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def live_stop_cmd(interaction: discord.Interaction, name: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -102,7 +112,6 @@ async def create_bot() -> FootballBot:
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="live-stop-all", description="Отменить все ваши подписки")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def live_stop_all_cmd(interaction: discord.Interaction):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -111,7 +120,6 @@ async def create_bot() -> FootballBot:
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="live-list", description="Показать ваши подписки")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def live_list_cmd(interaction: discord.Interaction):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -121,7 +129,6 @@ async def create_bot() -> FootballBot:
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="live-upcoming", description="Ближайшие матчи по вашим подпискам")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def live_upcoming_cmd(interaction: discord.Interaction):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -131,7 +138,6 @@ async def create_bot() -> FootballBot:
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="live-now", description="Матчи в эфире по вашим подпискам")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def live_now_cmd(interaction: discord.Interaction):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -142,7 +148,6 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="league-table", description="Показать таблицу лиги")
     @app_commands.describe(league="Название лиги")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def league_table_cmd(interaction: discord.Interaction, league: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -152,7 +157,6 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="league-streaks", description="Показать серии лиги")
     @app_commands.describe(league="Название лиги")
-    @app_commands.guilds(discord.Object(id=config.guild_id))
     async def league_streaks_cmd(interaction: discord.Interaction, league: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
