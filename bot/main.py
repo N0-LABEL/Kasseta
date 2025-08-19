@@ -182,6 +182,25 @@ async def create_bot() -> FootballBot:
         embed = Embeds.league_streaks(league, streaks)
         await interaction.response.send_message(embed=embed)
 
+    @bot.tree.command(name="next", description="Ближайший(ие) матч(и) по команде или лиге")
+    @app_commands.describe(subject="Команда или лига")
+    @app_commands.autocomplete(subject=_subject_autocomplete)
+    async def next_cmd(interaction: discord.Interaction, subject: str):
+        await require_guild_and_channel(interaction, config)
+        await sounds.play_command_sound(bot)
+        matches = await bot.scheduler.api.get_next_for_subject(subject)
+        if not matches:
+            await interaction.response.send_message(embed=Embeds.info("Ничего не найдено"))
+            return
+        # prettify times if present
+        for m in matches:
+            ts = m.get("ts")
+            if ts:
+                m["status"] = f"{discord.utils.format_dt(discord.utils.snowflake_time(int(ts)*1000) if False else discord.utils.format_dt)}"  # placeholder, we keep ts in embed builder
+        title = "Ближайший матч" if len(matches) == 1 else "Ближайшие матчи"
+        embed = Embeds.matches_list(title=title, matches=matches)
+        await interaction.response.send_message(embed=embed)
+
     return bot
 
 

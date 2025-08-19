@@ -180,6 +180,28 @@ class FootballAPI:
             query = mapped or query
         return await self._af_search_leagues(query, limit)
 
+    async def get_next_for_subject(self, subject: str) -> List[Dict[str, Any]]:
+        """If subject is a team -> return 1 next match; if league -> up to 5 next matches."""
+        if not (self.provider == "api_football" and self.api_key):
+            return []
+        name = subject or ""
+        if _contains_cyrillic(name):
+            name = RU_EN_SYNONYMS_TEAMS.get(name.lower().strip()) or RU_EN_SYNONYMS_LEAGUES.get(name.lower().strip()) or await self._ru_to_en(name) or name
+        # Prefer team match if both exist
+        team_id = await self._af_search_team_id(name)
+        if team_id:
+            fixtures = await self._af_fetch_upcoming_by_team(team_id, limit=1)
+            return [self._to_match_dict(f) for f in fixtures]
+        # else try league
+        league_info = await self._af_resolve_league(name)
+        if league_info:
+            lid = (league_info.get("league") or {}).get("id")
+            season = await self._af_get_current_season(league_info)
+            if lid and season:
+                fixtures = await self._af_fetch_upcoming_by_league(lid, season, limit=5)
+                return [self._to_match_dict(f) for f in fixtures]
+        return []
+
     # ===== Helpers (API-FOOTBALL) =====
     async def _af_request(self, path: str, params: Dict[str, Any]) -> Any:
         url = f"https://v3.football.api-sports.io{path}"
@@ -412,6 +434,7 @@ class FootballAPI:
             return False
 
     def _to_match_dict(self, fixture: Dict[str, Any]) -> Dict[str, Any]:
+        ts = (fixture.get("fixture") or {}).get("timestamp")  # seconds UTC
         return {
             "id": fixture.get("fixture", {}).get("id"),
             "league": (fixture.get("league") or {}).get("name"),
@@ -420,4 +443,5 @@ class FootballAPI:
             "status": (fixture.get("fixture") or {}).get("status", {}).get("short"),
             "home_goals": (fixture.get("goals") or {}).get("home", 0),
             "away_goals": (fixture.get("goals") or {}).get("away", 0),
+            "ts": ts,
         }
