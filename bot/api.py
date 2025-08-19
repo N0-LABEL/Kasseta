@@ -14,7 +14,6 @@ RU_EN_SYNONYMS_TEAMS: Dict[str, str] = {
     "реал мадрид": "Real Madrid",
     "барселона": "Barcelona",
     "атлетико": "Atletico Madrid",
-    "бавария мюнхен": "Bayern Munich",
     "манчестер сити": "Manchester City",
     "манчестер юнайтед": "Manchester United",
     "ливерпуль": "Liverpool",
@@ -27,8 +26,6 @@ RU_EN_SYNONYMS_TEAMS: Dict[str, str] = {
     "интер": "Inter",
     "интер милан": "Inter",
     "милан": "AC Milan",
-    "наполі": "Napoli",
-    "наполить": "Napoli",
     "наполі": "Napoli",
     "зенит": "Zenit",
     "спартак": "Spartak Moscow",
@@ -44,8 +41,6 @@ RU_EN_SYNONYMS_LEAGUES: Dict[str, str] = {
     "серия а": "Serie A",
     "бундеслига": "Bundesliga",
     "лига 1": "Ligue 1",
-    "лига 1 франция": "Ligue 1",
-    "рпл": "Premier League",
 }
 
 
@@ -53,122 +48,70 @@ def _contains_cyrillic(text: str) -> bool:
     return any('А' <= ch <= 'я' or ch == 'ё' or ch == 'Ё' for ch in text)
 
 
-def _ru_synonym_candidates(prefix: str, mapping: Dict[str, str], limit: int) -> List[Tuple[str, str]]:
-    prefix_l = (prefix or "").lower().strip()
-    result: List[Tuple[str, str]] = []
-    if not prefix_l:
-        return result
-    for ru, en in mapping.items():
-        if ru.startswith(prefix_l):
-            result.append((ru.title(), en))
-            if len(result) >= limit:
-                break
-    return result
-
-
 class FootballAPI:
     def __init__(self, provider: str = "mock", api_key: str | None = None) -> None:
         self.provider = provider
         self.api_key = api_key
-        # Demo data for mock
-        self._mock_matches: Dict[str, Dict[str, Any]] = {
-            "m1": {"id": "m1", "league": "Премьер-Лига", "home": "Зенит", "away": "Спартак", "status": "NS", "home_goals": 0, "away_goals": 0, "kickoff": time.time() + 600, "last_update": int(time.time())},
-            "m2": {"id": "m2", "league": "Ла Лига", "home": "Барселона", "away": "Реал", "status": "1H", "home_goals": 1, "away_goals": 0, "kickoff": time.time() - 1200, "last_update": int(time.time())},
-        }
 
     # ===== Public API =====
     async def get_live_for_user(self, user_id: int, subjects: List[str]) -> List[Dict[str, Any]]:
-        # Mock: return matches whose league or team matches subjects and status is live
-        result: List[Dict[str, Any]] = []
-        for m in self._mock_matches.values():
-            if m["status"] in {"1H", "HT", "2H", "ET"} and self._match_matches_subjects(m, subjects):
-                result.append(m.copy())
-        return result
+        # TODO: implement with real provider
+        return []
 
     async def get_upcoming_for_user(self, user_id: int, subjects: List[str]) -> List[Dict[str, Any]]:
-        result: List[Dict[str, Any]] = []
-        now = time.time()
-        for m in self._mock_matches.values():
-            if m["status"] == "NS" and m.get("kickoff", 0) > now and self._match_matches_subjects(m, subjects):
-                result.append(m.copy())
-        return result
+        # TODO: implement with real provider
+        return []
 
     async def get_active_for_user(self, user_id: int, subjects: List[str]) -> List[Dict[str, Any]]:
-        # Active = not finished and matches subjects
-        result: List[Dict[str, Any]] = []
-        for m in self._mock_matches.values():
-            if m["status"] not in {"FT", "AET", "PEN"} and self._match_matches_subjects(m, subjects):
-                result.append(m.copy())
-        return result
+        # TODO: implement with real provider
+        return []
 
     async def get_league_table(self, league: str) -> List[Dict[str, Any]]:
         if self.provider == "api_football" and self.api_key:
             table = await self._af_get_league_table(league)
-            if table is not None:
-                return table
-        # Fallback mock
-        return [
-            {"pos": 1, "team": "Команда A", "points": 45, "w": 14, "d": 3, "l": 2},
-            {"pos": 2, "team": "Команда B", "points": 41, "w": 13, "d": 2, "l": 4},
-        ]
+            return table or []
+        return []
 
     async def get_league_streaks(self, league: str) -> List[Dict[str, Any]]:
-        # Placeholder: real API mapping не реализован; оставить mock
-        return [
-            {"team": "Команда A", "type": "Победная серия", "value": 5},
-            {"team": "Команда C", "type": "Без побед", "value": 4},
-        ]
+        # TODO: implement with real provider
+        return []
 
     async def poll_changes(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        # Returns (goals, finished)
-        goals: List[Dict[str, Any]] = []
-        finished: List[Dict[str, Any]] = []
-        # Mock: flip statuses randomly not implemented; keep static for demo
-        return goals, finished
+        # TODO: implement with real provider
+        return [], []
 
     async def get_subject_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
-        # RU-friendly: suggest RU synonyms first with API-Football values
-        if _contains_cyrillic(prefix):
-            ru_cands = _ru_synonym_candidates(prefix, RU_EN_SYNONYMS_TEAMS, limit)
-            if ru_cands:
-                # Return Russian labels for display; values will be same here (UI layer may map)
-                return [ru for (ru, _en) in ru_cands]
-        if self.provider == "api_football" and self.api_key:
-            leagues = await self._af_search_leagues(prefix, limit)
-            teams = await self._af_search_teams(prefix, limit)
-            out: List[str] = []
-            seen = set()
-            for s in leagues + teams:
-                if s not in seen:
-                    seen.add(s)
-                    out.append(s)
-                if len(out) >= limit:
-                    break
-            return out
-        # mock
-        prefix_l = (prefix or "").lower()
-        pool = set()
-        for m in self._mock_matches.values():
-            pool.add(m["league"]) 
-            pool.add(m["home"]) 
-            pool.add(m["away"]) 
-        items = sorted(pool)
-        if prefix_l:
-            items = [x for x in items if x.lower().startswith(prefix_l)]
-        return items[:limit]
+        if not (self.provider == "api_football" and self.api_key):
+            return []
+        query = prefix or ""
+        if _contains_cyrillic(query):
+            # Try synonyms quick map, then Wikipedia RU→EN
+            mapped = RU_EN_SYNONYMS_TEAMS.get(query.lower().strip())
+            if not mapped:
+                mapped = await self._ru_to_en(query)
+            query = mapped or query
+        leagues = await self._af_search_leagues(query, limit)
+        teams = await self._af_search_teams(query, limit)
+        out: List[str] = []
+        seen = set()
+        for s in leagues + teams:
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+            if len(out) >= limit:
+                break
+        return out
 
     async def get_league_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
-        if _contains_cyrillic(prefix):
-            ru_cands = _ru_synonym_candidates(prefix, RU_EN_SYNONYMS_LEAGUES, limit)
-            if ru_cands:
-                return [ru for (ru, _en) in ru_cands]
-        if self.provider == "api_football" and self.api_key:
-            return await self._af_search_leagues(prefix, limit)
-        prefix_l = (prefix or "").lower()
-        leagues = sorted({m["league"] for m in self._mock_matches.values()})
-        if prefix_l:
-            leagues = [x for x in leagues if x.lower().startswith(prefix_l)]
-        return leagues[:limit]
+        if not (self.provider == "api_football" and self.api_key):
+            return []
+        query = prefix or ""
+        if _contains_cyrillic(query):
+            mapped = RU_EN_SYNONYMS_LEAGUES.get(query.lower().strip())
+            if not mapped:
+                mapped = await self._ru_to_en(query)
+            query = mapped or query
+        return await self._af_search_leagues(query, limit)
 
     # ===== Helpers (API-FOOTBALL) =====
     async def _af_request(self, path: str, params: Dict[str, Any]) -> Any:
@@ -202,11 +145,6 @@ class FootballAPI:
             return []
 
     async def _af_search_teams(self, query: str, limit: int) -> List[str]:
-        # If query in RU, try synonyms map to EN first
-        if _contains_cyrillic(query):
-            mapped = [en for (_ru, en) in _ru_synonym_candidates(query, RU_EN_SYNONYMS_TEAMS, limit)]
-            if mapped:
-                return mapped
         try:
             data = await self._af_request("/teams", {"search": query or ""})
             names: List[str] = []
@@ -228,15 +166,45 @@ class FootballAPI:
         except Exception:
             return []
 
+    async def _ru_to_en(self, text: str) -> str | None:
+        # Use Russian Wikipedia to resolve English interlanguage link
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Search best RU page
+                search_url = "https://ru.wikipedia.org/w/api.php"
+                params = {"action": "query", "list": "search", "srsearch": text, "srlimit": 1, "format": "json"}
+                async with session.get(search_url, params=params, timeout=10) as resp:
+                    data = await resp.json()
+                hits = data.get("query", {}).get("search", [])
+                if not hits:
+                    return None
+                title = hits[0].get("title")
+                if not title:
+                    return None
+                # Fetch English langlink
+                info_params = {"action": "query", "prop": "langlinks", "titles": title, "lllang": "en", "format": "json"}
+                async with session.get(search_url, params=info_params, timeout=10) as resp:
+                    data2 = await resp.json()
+                pages = data2.get("query", {}).get("pages", {})
+                for _pid, page in pages.items():
+                    links = page.get("langlinks", [])
+                    if links:
+                        return links[0].get("*")
+                return None
+        except Exception:
+            return None
+
     async def _af_resolve_league(self, name: str) -> Dict[str, Any] | None:
-        # Map RU league to EN if needed
-        name_q = RU_EN_SYNONYMS_LEAGUES.get(name.lower().strip(), name)
+        # Map RU league to EN via synonyms or Wikipedia
+        name_q = name
+        if _contains_cyrillic(name_q):
+            name_q = RU_EN_SYNONYMS_LEAGUES.get(name_q.lower().strip()) or await self._ru_to_en(name_q) or name_q
         data = await self._af_request("/leagues", {"search": name_q})
         candidates = data.get("response", [])
         if not candidates:
             return None
         # Prefer exact case-insensitive match
-        name_l = name_q.strip().lower()
+        name_l = (name_q or "").strip().lower()
         candidates.sort(key=lambda it: 0 if (it.get("league", {}).get("name", "").lower() == name_l) else 1)
         return candidates[0]
 
@@ -280,11 +248,5 @@ class FootballAPI:
 
     # ===== Utils =====
     def _match_matches_subjects(self, m: Dict[str, Any], subjects: List[str]) -> bool:
-        if not subjects:
-            return False
-        sset = {s.lower() for s in subjects}
-        return (
-            m["league"].lower() in sset
-            or m["home"].lower() in sset
-            or m["away"].lower() in sset
-        )
+        # TODO: real matching
+        return False
