@@ -202,6 +202,25 @@ class FootballAPI:
                 return [self._to_match_dict(f) for f in fixtures]
         return []
 
+    async def verify_subject(self, name: str) -> Optional[Tuple[str, str]]:
+        """Return (type, canonical_name) where type in {"team","league"} if resolvable, else None."""
+        if not (self.provider == "api_football" and self.api_key):
+            return None
+        q = name or ""
+        if _contains_cyrillic(q):
+            q = RU_EN_SYNONYMS_TEAMS.get(q.lower().strip()) or RU_EN_SYNONYMS_LEAGUES.get(q.lower().strip()) or await self._ru_to_en(q) or q
+        # Try team
+        tid = await self._af_search_team_id(q)
+        if tid:
+            tname = await self._af_get_team_name(tid)
+            return ("team", tname or q)
+        # Try league
+        info = await self._af_resolve_league(q)
+        if info:
+            lname = (info.get("league") or {}).get("name")
+            return ("league", lname or q)
+        return None
+
     # ===== Helpers (API-FOOTBALL) =====
     async def _af_request(self, path: str, params: Dict[str, Any]) -> Any:
         url = f"https://v3.football.api-sports.io{path}"
@@ -360,6 +379,16 @@ class FootballAPI:
             return rows
         except Exception as e:
             logger.exception("Failed to fetch standings for '%s': %s", league_name, e)
+            return None
+
+    async def _af_get_team_name(self, team_id: int) -> Optional[str]:
+        try:
+            data = await self._af_request("/teams", {"id": team_id})
+            resp = data.get("response", [])
+            if not resp:
+                return None
+            return (resp[0].get("team") or {}).get("name")
+        except Exception:
             return None
 
     async def _af_search_team_id(self, name: str) -> Optional[int]:
