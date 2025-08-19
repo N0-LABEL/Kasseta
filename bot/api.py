@@ -115,7 +115,7 @@ class FootballAPI:
     async def get_subject_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
         if not (self.provider == "api_football" and self.api_key):
             return []
-        query = await self._ru_to_query(prefix)
+        query = await self._ru_to_query(prefix, fast=True)
         leagues = await self._af_search_leagues(query, limit)
         teams = await self._af_search_teams(query, limit)
         out: List[str] = []
@@ -131,7 +131,7 @@ class FootballAPI:
     async def get_league_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
         if not (self.provider == "api_football" and self.api_key):
             return []
-        query = await self._ru_to_query(prefix, is_league=True)
+        query = await self._ru_to_query(prefix, is_league=True, fast=True)
         return await self._af_search_leagues(query, limit)
 
     async def get_next_for_subject(self, subject: str) -> List[Dict[str, Any]]:
@@ -171,7 +171,7 @@ class FootballAPI:
         headers = {"x-apisports-key": self.api_key}
         try:
             async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.get(url, params=params, timeout=15) as resp:
+                async with session.get(url, params=params, timeout=10) as resp:
                     status = resp.status
                     if status >= 400:
                         text = await resp.text()
@@ -186,7 +186,7 @@ class FootballAPI:
         try:
             data = await self._af_request("/leagues", {"search": query or ""})
             names: List[str] = []
-            for item in data.get("response", [])[: max(limit, 1) * 3]:
+            for item in data.get("response", [])[: max(limit, 1) * 2]:
                 league = item.get("league") or {}
                 country = (item.get("country") or {}).get("name")
                 name = league.get("name")
@@ -212,7 +212,7 @@ class FootballAPI:
         try:
             data = await self._af_request("/teams", {"search": query or ""})
             names: List[str] = []
-            for item in data.get("response", [])[: max(limit, 1) * 3]:
+            for item in data.get("response", [])[: max(limit, 1) * 2]:
                 team = item.get("team") or {}
                 name = team.get("name")
                 if name:
@@ -229,19 +229,18 @@ class FootballAPI:
         except Exception:
             return []
 
-    async def _ru_to_query(self, text: str, is_league: bool = False) -> str:
+    async def _ru_to_query(self, text: str, is_league: bool = False, fast: bool = False) -> str:
         q = (text or "").strip()
         if not q:
             return q
         if _contains_cyrillic(q):
-            # 1) Try simple transliteration
             tr = unidecode(q)
             if tr:
                 return tr
-            # 2) Try Wikipedia RU->EN link
-            en = await self._ru_to_en(q)
-            if en:
-                return en
+            if not fast:
+                en = await self._ru_to_en(q)
+                if en:
+                    return en
         return q
 
     async def _ru_to_en(self, text: str) -> str | None:
@@ -249,7 +248,7 @@ class FootballAPI:
             async with aiohttp.ClientSession() as session:
                 search_url = "https://ru.wikipedia.org/w/api.php"
                 params = {"action": "query", "list": "search", "srsearch": text, "srlimit": 1, "format": "json"}
-                async with session.get(search_url, params=params, timeout=10) as resp:
+                async with session.get(search_url, params=params, timeout=5) as resp:
                     data = await resp.json()
                 hits = data.get("query", {}).get("search", [])
                 if not hits:
@@ -258,7 +257,7 @@ class FootballAPI:
                 if not title:
                     return None
                 info_params = {"action": "query", "prop": "langlinks", "titles": title, "lllang": "en", "format": "json"}
-                async with session.get(search_url, params=info_params, timeout=10) as resp:
+                async with session.get(search_url, params=info_params, timeout=5) as resp:
                     data2 = await resp.json()
                 pages = data2.get("query", {}).get("pages", {})
                 for _pid, page in pages.items():
