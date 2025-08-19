@@ -58,6 +58,25 @@ class FootballAPI:
         # Mock: flip statuses randomly not implemented; keep static for demo
         return goals, finished
 
+    async def get_subject_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
+        prefix_l = (prefix or "").lower()
+        pool = set()
+        for m in self._mock_matches.values():
+            pool.add(m["league"]) 
+            pool.add(m["home"]) 
+            pool.add(m["away"]) 
+        items = sorted(pool)
+        if prefix_l:
+            items = [x for x in items if x.lower().startswith(prefix_l)]
+        return items[:limit]
+
+    async def get_league_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
+        prefix_l = (prefix or "").lower()
+        leagues = sorted({m["league"] for m in self._mock_matches.values()})
+        if prefix_l:
+            leagues = [x for x in leagues if x.lower().startswith(prefix_l)]
+        return leagues[:limit]
+
     def _match_matches_subjects(self, m: Dict[str, Any], subjects: List[str]) -> bool:
         if not subjects:
             return False

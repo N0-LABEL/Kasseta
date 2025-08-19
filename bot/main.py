@@ -85,6 +85,14 @@ async def create_bot() -> FootballBot:
             await bot.voice_guard.on_self_voice_state_change(bot, before, after)
 
     # ===== Команды =====
+    async def _subject_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        suggestions = await bot.scheduler.api.get_subject_suggestions(current)
+        return [app_commands.Choice(name=s, value=s) for s in suggestions]
+
+    async def _league_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        suggestions = await bot.scheduler.api.get_league_suggestions(current)
+        return [app_commands.Choice(name=s, value=s) for s in suggestions]
+
     @bot.tree.command(name="help", description="Показать помощь")
     async def help_cmd(interaction: discord.Interaction):
         await require_guild_and_channel(interaction, config)
@@ -94,6 +102,7 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="live", description="Подписаться на лайв (команда или лига)")
     @app_commands.describe(name="Команда или лига")
+    @app_commands.autocomplete(name=_subject_autocomplete)
     async def live_cmd(interaction: discord.Interaction, name: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -103,6 +112,7 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="live-stop", description="Отменить подписку (команда или лига)")
     @app_commands.describe(name="Команда или лига")
+    @app_commands.autocomplete(name=_subject_autocomplete)
     async def live_stop_cmd(interaction: discord.Interaction, name: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -148,6 +158,7 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="league-table", description="Показать таблицу лиги")
     @app_commands.describe(league="Название лиги")
+    @app_commands.autocomplete(league=_league_autocomplete)
     async def league_table_cmd(interaction: discord.Interaction, league: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
@@ -157,6 +168,7 @@ async def create_bot() -> FootballBot:
 
     @bot.tree.command(name="league-streaks", description="Показать серии лиги")
     @app_commands.describe(league="Название лиги")
+    @app_commands.autocomplete(league=_league_autocomplete)
     async def league_streaks_cmd(interaction: discord.Interaction, league: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
