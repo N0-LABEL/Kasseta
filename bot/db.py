@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import aiosqlite
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 
@@ -10,7 +12,11 @@ class Database:
 
     @classmethod
     async def create(cls, path: str) -> "Database":
-        conn = await aiosqlite.connect(path)
+        # Ensure parent directory exists for cross-platform use
+        db_path = Path(path)
+        if db_path.parent and not db_path.parent.exists():
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = await aiosqlite.connect(str(db_path))
         await conn.execute("PRAGMA journal_mode=WAL;")
         await conn.execute(
             """

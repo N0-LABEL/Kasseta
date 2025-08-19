@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import List
 
 import discord
@@ -45,7 +46,10 @@ async def create_bot() -> FootballBot:
     logger = logging.getLogger("bot")
     logger.info("Запуск бота…")
 
-    db = await Database.create(path="/workspace/bot/data/bot.db")
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    db_path = os.path.join(base_dir, "bot", "data", "bot.db")
+
+    db = await Database.create(path=db_path)
     sounds = SoundPlayer(enabled=config.sounds_enabled)
 
     # API и планировщик

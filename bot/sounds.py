@@ -4,7 +4,9 @@ import os
 import discord
 
 
-ASSETS_DIR = "/workspace/assets/sounds"
+def _assets_dir() -> str:
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    return os.path.join(base_dir, "assets", "sounds")
 
 
 class SoundPlayer:
@@ -23,7 +25,7 @@ class SoundPlayer:
         vc = self._get_voice_client(bot)
         if vc is None:
             return
-        path = os.path.join(ASSETS_DIR, filename)
+        path = os.path.join(_assets_dir(), filename)
         if not os.path.isfile(path):
             return
         if vc.is_playing():
