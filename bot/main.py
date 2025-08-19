@@ -6,7 +6,7 @@ from typing import List
 import discord
 from discord import app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
 from .config import BotConfig
 from .db import Database
@@ -17,7 +17,7 @@ from .sounds import SoundPlayer
 from .voice_guard import VoiceGuardian
 
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 
 intents = discord.Intents.default()
