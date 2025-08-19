@@ -109,8 +109,13 @@ async def create_bot() -> FootballBot:
     async def live_cmd(interaction: discord.Interaction, name: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
-        await db.add_subscription(user_id=interaction.user.id, subject=name)
-        embed = Embeds.success(f"Вы подписались на лайв: {name}")
+        verified = await bot.scheduler.api.verify_subject(name)
+        if not verified:
+            await interaction.response.send_message(embed=Embeds.error("Не удалось распознать команду или лигу. Выберите из подсказки или укажите точнее."))
+            return
+        kind, canonical = verified
+        await db.add_subscription(user_id=interaction.user.id, subject=canonical)
+        embed = Embeds.success(f"Вы подписались на лайв: {canonical}")
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="live-stop", description="Отменить подписку (команда или лига)")
@@ -120,8 +125,13 @@ async def create_bot() -> FootballBot:
     async def live_stop_cmd(interaction: discord.Interaction, name: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
-        removed = await db.remove_subscription(user_id=interaction.user.id, subject=name)
-        msg = f"Подписка удалена: {name}" if removed else f"Подписка не найдена: {name}"
+        verified = await bot.scheduler.api.verify_subject(name)
+        if not verified:
+            await interaction.response.send_message(embed=Embeds.error("Не удалось распознать предмет подписки."))
+            return
+        _kind, canonical = verified
+        removed = await db.remove_subscription(user_id=interaction.user.id, subject=canonical)
+        msg = f"Подписка удалена: {canonical}" if removed else f"Подписка не найдена: {canonical}"
         embed = Embeds.info(msg)
         await interaction.response.send_message(embed=embed)
 
@@ -192,11 +202,6 @@ async def create_bot() -> FootballBot:
         if not matches:
             await interaction.response.send_message(embed=Embeds.info("Ничего не найдено"))
             return
-        # prettify times if present
-        for m in matches:
-            ts = m.get("ts")
-            if ts:
-                m["status"] = f"{discord.utils.format_dt(discord.utils.snowflake_time(int(ts)*1000) if False else discord.utils.format_dt)}"  # placeholder, we keep ts in embed builder
         title = "Ближайший матч" if len(matches) == 1 else "Ближайшие матчи"
         embed = Embeds.matches_list(title=title, matches=matches)
         await interaction.response.send_message(embed=embed)
