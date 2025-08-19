@@ -4,46 +4,10 @@ import logging
 from typing import List, Dict, Any, Tuple, Optional, Set
 
 import aiohttp
+from unidecode import unidecode
 
 
 logger = logging.getLogger("api")
-
-# Basic RU→EN synonyms (extendable)
-RU_EN_SYNONYMS_TEAMS: Dict[str, str] = {
-    "бавария": "Bayern Munich",
-    "бавария мюнхен": "Bayern Munich",
-    "реал": "Real Madrid",
-    "реал мадрид": "Real Madrid",
-    "барселона": "Barcelona",
-    "атлетико": "Atletico Madrid",
-    "манчестер сити": "Manchester City",
-    "манчестер юнайтед": "Manchester United",
-    "ливерпуль": "Liverpool",
-    "арсенал": "Arsenal",
-    "челси": "Chelsea",
-    "тоттенхэм": "Tottenham",
-    "псж": "Paris Saint Germain",
-    "пари сен-жермен": "Paris Saint Germain",
-    "ювентус": "Juventus",
-    "интер": "Inter",
-    "интер милан": "Inter",
-    "милан": "AC Milan",
-    "наполі": "Napoli",
-    "зенит": "Zenit",
-    "спартак": "Spartak Moscow",
-    "локомотив": "Lokomotiv Moscow",
-    "цска": "CSKA Moscow",
-}
-
-RU_EN_SYNONYMS_LEAGUES: Dict[str, str] = {
-    "премьер-лига": "Premier League",
-    "апл": "Premier League",
-    "ла лига": "La Liga",
-    "сегунда": "La Liga 2",
-    "серия а": "Serie A",
-    "бундеслига": "Bundesliga",
-    "лига 1": "Ligue 1",
-}
 
 # Preferred country for ambiguous league names
 PREFERRED_COUNTRY: Dict[str, str] = {
@@ -117,7 +81,6 @@ class FootballAPI:
         return []
 
     async def get_league_streaks(self, league: str) -> List[Dict[str, Any]]:
-        # Compute from standings form if available
         rows = await self._af_get_league_table(league)
         if not rows:
             return []
@@ -126,11 +89,9 @@ class FootballAPI:
             form: Optional[str] = r.get("form")
             if not form:
                 continue
-            # Normalize form like "WWDLW" or "W,W,D,L,W" into sequence of last->first
             seq = form.replace(",", "").strip().upper()
             if not seq:
                 continue
-            # Assume rightmost is most recent (API-FOOTBALL convention)
             current = seq[-1]
             length = 1
             for ch in reversed(seq[:-1]):
@@ -149,16 +110,12 @@ class FootballAPI:
         return streaks[:10]
 
     async def poll_changes(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        # Not implemented without a push/long-poll plan; scheduler can poll live fixtures periodically and diff
         return [], []
 
     async def get_subject_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
         if not (self.provider == "api_football" and self.api_key):
             return []
-        query = prefix or ""
-        if _contains_cyrillic(query):
-            mapped = RU_EN_SYNONYMS_TEAMS.get(query.lower().strip()) or await self._ru_to_en(query)
-            query = mapped or query
+        query = await self._ru_to_query(prefix)
         leagues = await self._af_search_leagues(query, limit)
         teams = await self._af_search_teams(query, limit)
         out: List[str] = []
@@ -174,25 +131,17 @@ class FootballAPI:
     async def get_league_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
         if not (self.provider == "api_football" and self.api_key):
             return []
-        query = prefix or ""
-        if _contains_cyrillic(query):
-            mapped = RU_EN_SYNONYMS_LEAGUES.get(query.lower().strip()) or await self._ru_to_en(query)
-            query = mapped or query
+        query = await self._ru_to_query(prefix, is_league=True)
         return await self._af_search_leagues(query, limit)
 
     async def get_next_for_subject(self, subject: str) -> List[Dict[str, Any]]:
-        """If subject is a team -> return 1 next match; if league -> up to 5 next matches."""
         if not (self.provider == "api_football" and self.api_key):
             return []
-        name = subject or ""
-        if _contains_cyrillic(name):
-            name = RU_EN_SYNONYMS_TEAMS.get(name.lower().strip()) or RU_EN_SYNONYMS_LEAGUES.get(name.lower().strip()) or await self._ru_to_en(name) or name
-        # Prefer team match if both exist
+        name = await self._ru_to_query(subject)
         team_id = await self._af_search_team_id(name)
         if team_id:
             fixtures = await self._af_fetch_upcoming_by_team(team_id, limit=1)
             return [self._to_match_dict(f) for f in fixtures]
-        # else try league
         league_info = await self._af_resolve_league(name)
         if league_info:
             lid = (league_info.get("league") or {}).get("id")
@@ -203,18 +152,13 @@ class FootballAPI:
         return []
 
     async def verify_subject(self, name: str) -> Optional[Tuple[str, str]]:
-        """Return (type, canonical_name) where type in {"team","league"} if resolvable, else None."""
         if not (self.provider == "api_football" and self.api_key):
             return None
-        q = name or ""
-        if _contains_cyrillic(q):
-            q = RU_EN_SYNONYMS_TEAMS.get(q.lower().strip()) or RU_EN_SYNONYMS_LEAGUES.get(q.lower().strip()) or await self._ru_to_en(q) or q
-        # Try team
+        q = await self._ru_to_query(name)
         tid = await self._af_search_team_id(q)
         if tid:
             tname = await self._af_get_team_name(tid)
             return ("team", tname or q)
-        # Try league
         info = await self._af_resolve_league(q)
         if info:
             lname = (info.get("league") or {}).get("name")
@@ -248,12 +192,10 @@ class FootballAPI:
                 name = league.get("name")
                 if not name:
                     continue
-                # Prefer with country disambiguation
                 pref = PREFERRED_COUNTRY.get(name)
                 if pref and country and country != pref:
                     continue
                 names.append(name)
-            # unique, keep order
             seen = set()
             result: List[str] = []
             for n in names:
@@ -275,7 +217,6 @@ class FootballAPI:
                 name = team.get("name")
                 if name:
                     names.append(name)
-            # unique, keep order
             seen = set()
             result: List[str] = []
             for n in names:
@@ -288,11 +229,24 @@ class FootballAPI:
         except Exception:
             return []
 
+    async def _ru_to_query(self, text: str, is_league: bool = False) -> str:
+        q = (text or "").strip()
+        if not q:
+            return q
+        if _contains_cyrillic(q):
+            # 1) Try simple transliteration
+            tr = unidecode(q)
+            if tr:
+                return tr
+            # 2) Try Wikipedia RU->EN link
+            en = await self._ru_to_en(q)
+            if en:
+                return en
+        return q
+
     async def _ru_to_en(self, text: str) -> str | None:
-        # Use Russian Wikipedia to resolve English interlanguage link
         try:
             async with aiohttp.ClientSession() as session:
-                # Search best RU page
                 search_url = "https://ru.wikipedia.org/w/api.php"
                 params = {"action": "query", "list": "search", "srsearch": text, "srlimit": 1, "format": "json"}
                 async with session.get(search_url, params=params, timeout=10) as resp:
@@ -303,7 +257,6 @@ class FootballAPI:
                 title = hits[0].get("title")
                 if not title:
                     return None
-                # Fetch English langlink
                 info_params = {"action": "query", "prop": "langlinks", "titles": title, "lllang": "en", "format": "json"}
                 async with session.get(search_url, params=info_params, timeout=10) as resp:
                     data2 = await resp.json()
@@ -318,21 +271,16 @@ class FootballAPI:
             return None
 
     async def _af_resolve_league(self, name: str) -> Dict[str, Any] | None:
-        # Map RU league to EN via synonyms or Wikipedia
-        name_q = name
-        if _contains_cyrillic(name_q):
-            name_q = RU_EN_SYNONYMS_LEAGUES.get(name_q.lower().strip()) or await self._ru_to_en(name_q) or name_q
+        name_q = await self._ru_to_query(name, is_league=True)
         data = await self._af_request("/leagues", {"search": name_q})
         candidates = data.get("response", [])
         if not candidates:
             return None
-        # Prefer preferred country match
         pref_country = PREFERRED_COUNTRY.get(name_q)
         if pref_country:
             filtered = [c for c in candidates if (c.get("country") or {}).get("name") == pref_country]
             if filtered:
                 candidates = filtered
-        # Prefer exact case-insensitive match
         name_l = (name_q or "").strip().lower()
         candidates.sort(key=lambda it: 0 if (it.get("league", {}).get("name", "").lower() == name_l) else 1)
         return candidates[0]
@@ -372,7 +320,7 @@ class FootballAPI:
                 w = (all_stats.get("win") or 0)
                 d = (all_stats.get("draw") or 0)
                 l = (all_stats.get("lose") or 0)
-                form = row.get("form")  # e.g., "WWDLW"
+                form = row.get("form")
                 if team_name and rank is not None and points is not None:
                     rows.append({"pos": rank, "team": team_name, "points": points, "w": w, "d": d, "l": l, "form": form})
             rows.sort(key=lambda r: r["pos"])  # ensure order
@@ -396,7 +344,6 @@ class FootballAPI:
         resp = data.get("response", [])
         if not resp:
             return None
-        # Prefer exact match
         name_l = name.lower().strip()
         resp.sort(key=lambda it: 0 if (it.get("team", {}).get("name", "").lower() == name_l) else 1)
         return resp[0].get("team", {}).get("id")
@@ -445,9 +392,7 @@ class FootballAPI:
     async def _normalize_subjects(self, subjects: List[str]) -> Set[str]:
         out: Set[str] = set()
         for s in subjects or []:
-            q = s
-            if _contains_cyrillic(q):
-                q = RU_EN_SYNONYMS_TEAMS.get(q.lower().strip()) or RU_EN_SYNONYMS_LEAGUES.get(q.lower().strip()) or await self._ru_to_en(q) or q
+            q = await self._ru_to_query(s)
             out.add(q.strip())
         return {x for x in out if x}
 
@@ -463,7 +408,7 @@ class FootballAPI:
             return False
 
     def _to_match_dict(self, fixture: Dict[str, Any]) -> Dict[str, Any]:
-        ts = (fixture.get("fixture") or {}).get("timestamp")  # seconds UTC
+        ts = (fixture.get("fixture") or {}).get("timestamp")
         return {
             "id": fixture.get("fixture", {}).get("id"),
             "league": (fixture.get("league") or {}).get("name"),
