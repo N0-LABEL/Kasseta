@@ -177,8 +177,13 @@ async def create_bot() -> FootballBot:
     async def league_table_cmd(interaction: discord.Interaction, league: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
-        table = await bot.scheduler.api.get_league_table(league)
-        embed = Embeds.league_table(league, table)
+        verified = await bot.scheduler.api.verify_subject(league)
+        if not verified or verified[0] != "league":
+            await interaction.response.send_message(embed=Embeds.error("Укажите корректную лигу (выберите из подсказки)."))
+            return
+        _kind, canonical = verified
+        table = await bot.scheduler.api.get_league_table(canonical)
+        embed = Embeds.league_table(canonical, table)
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="league-streaks", description="Показать серии лиги")
@@ -188,8 +193,13 @@ async def create_bot() -> FootballBot:
     async def league_streaks_cmd(interaction: discord.Interaction, league: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
-        streaks = await bot.scheduler.api.get_league_streaks(league)
-        embed = Embeds.league_streaks(league, streaks)
+        verified = await bot.scheduler.api.verify_subject(league)
+        if not verified or verified[0] != "league":
+            await interaction.response.send_message(embed=Embeds.error("Укажите корректную лигу (выберите из подсказки)."))
+            return
+        _kind, canonical = verified
+        streaks = await bot.scheduler.api.get_league_streaks(canonical)
+        embed = Embeds.league_streaks(canonical, streaks)
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="next", description="Ближайший(ие) матч(и) по команде или лиге")
@@ -198,7 +208,12 @@ async def create_bot() -> FootballBot:
     async def next_cmd(interaction: discord.Interaction, subject: str):
         await require_guild_and_channel(interaction, config)
         await sounds.play_command_sound(bot)
-        matches = await bot.scheduler.api.get_next_for_subject(subject)
+        verified = await bot.scheduler.api.verify_subject(subject)
+        if not verified:
+            await interaction.response.send_message(embed=Embeds.error("Не удалось распознать команду или лигу."))
+            return
+        _kind, canonical = verified
+        matches = await bot.scheduler.api.get_next_for_subject(canonical)
         if not matches:
             await interaction.response.send_message(embed=Embeds.info("Ничего не найдено"))
             return
