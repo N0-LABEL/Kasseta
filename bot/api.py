@@ -6,6 +6,66 @@ from typing import List, Dict, Any, Tuple
 import aiohttp
 
 
+# Basic RU→EN synonyms (extendable)
+RU_EN_SYNONYMS_TEAMS: Dict[str, str] = {
+    "бавария": "Bayern Munich",
+    "бавария мюнхен": "Bayern Munich",
+    "реал": "Real Madrid",
+    "реал мадрид": "Real Madrid",
+    "барселона": "Barcelona",
+    "атлетико": "Atletico Madrid",
+    "бавария мюнхен": "Bayern Munich",
+    "манчестер сити": "Manchester City",
+    "манчестер юнайтед": "Manchester United",
+    "ливерпуль": "Liverpool",
+    "арсенал": "Arsenal",
+    "челси": "Chelsea",
+    "тоттенхэм": "Tottenham",
+    "псж": "Paris Saint Germain",
+    "пари сен-жермен": "Paris Saint Germain",
+    "ювентус": "Juventus",
+    "интер": "Inter",
+    "интер милан": "Inter",
+    "милан": "AC Milan",
+    "наполі": "Napoli",
+    "наполить": "Napoli",
+    "наполі": "Napoli",
+    "зенит": "Zenit",
+    "спартак": "Spartak Moscow",
+    "локомотив": "Lokomotiv Moscow",
+    "цска": "CSKA Moscow",
+}
+
+RU_EN_SYNONYMS_LEAGUES: Dict[str, str] = {
+    "премьер-лига": "Premier League",
+    "апл": "Premier League",
+    "ла лига": "La Liga",
+    "сегунда": "La Liga 2",
+    "серия а": "Serie A",
+    "бундеслига": "Bundesliga",
+    "лига 1": "Ligue 1",
+    "лига 1 франция": "Ligue 1",
+    "рпл": "Premier League",
+}
+
+
+def _contains_cyrillic(text: str) -> bool:
+    return any('А' <= ch <= 'я' or ch == 'ё' or ch == 'Ё' for ch in text)
+
+
+def _ru_synonym_candidates(prefix: str, mapping: Dict[str, str], limit: int) -> List[Tuple[str, str]]:
+    prefix_l = (prefix or "").lower().strip()
+    result: List[Tuple[str, str]] = []
+    if not prefix_l:
+        return result
+    for ru, en in mapping.items():
+        if ru.startswith(prefix_l):
+            result.append((ru.title(), en))
+            if len(result) >= limit:
+                break
+    return result
+
+
 class FootballAPI:
     def __init__(self, provider: str = "mock", api_key: str | None = None) -> None:
         self.provider = provider
@@ -67,6 +127,12 @@ class FootballAPI:
         return goals, finished
 
     async def get_subject_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
+        # RU-friendly: suggest RU synonyms first with API-Football values
+        if _contains_cyrillic(prefix):
+            ru_cands = _ru_synonym_candidates(prefix, RU_EN_SYNONYMS_TEAMS, limit)
+            if ru_cands:
+                # Return Russian labels for display; values will be same here (UI layer may map)
+                return [ru for (ru, _en) in ru_cands]
         if self.provider == "api_football" and self.api_key:
             leagues = await self._af_search_leagues(prefix, limit)
             teams = await self._af_search_teams(prefix, limit)
@@ -92,6 +158,10 @@ class FootballAPI:
         return items[:limit]
 
     async def get_league_suggestions(self, prefix: str, limit: int = 20) -> List[str]:
+        if _contains_cyrillic(prefix):
+            ru_cands = _ru_synonym_candidates(prefix, RU_EN_SYNONYMS_LEAGUES, limit)
+            if ru_cands:
+                return [ru for (ru, _en) in ru_cands]
         if self.provider == "api_football" and self.api_key:
             return await self._af_search_leagues(prefix, limit)
         prefix_l = (prefix or "").lower()
@@ -132,6 +202,11 @@ class FootballAPI:
             return []
 
     async def _af_search_teams(self, query: str, limit: int) -> List[str]:
+        # If query in RU, try synonyms map to EN first
+        if _contains_cyrillic(query):
+            mapped = [en for (_ru, en) in _ru_synonym_candidates(query, RU_EN_SYNONYMS_TEAMS, limit)]
+            if mapped:
+                return mapped
         try:
             data = await self._af_request("/teams", {"search": query or ""})
             names: List[str] = []
@@ -154,12 +229,14 @@ class FootballAPI:
             return []
 
     async def _af_resolve_league(self, name: str) -> Dict[str, Any] | None:
-        data = await self._af_request("/leagues", {"search": name})
+        # Map RU league to EN if needed
+        name_q = RU_EN_SYNONYMS_LEAGUES.get(name.lower().strip(), name)
+        data = await self._af_request("/leagues", {"search": name_q})
         candidates = data.get("response", [])
         if not candidates:
             return None
         # Prefer exact case-insensitive match
-        name_l = name.strip().lower()
+        name_l = name_q.strip().lower()
         candidates.sort(key=lambda it: 0 if (it.get("league", {}).get("name", "").lower() == name_l) else 1)
         return candidates[0]
 
