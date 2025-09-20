@@ -249,7 +249,7 @@ async def update_now_playing(ctx, message, state):
                 f"Добавил: {state.current['user'].mention}"
             )
 
-            await message.edit(embed=create_embed("Сейчас играеt", description))
+            await message.edit(embed=create_embed("Сейчас играет", description))
             await asyncio.sleep(15)
         except:
             break
